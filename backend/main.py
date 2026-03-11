@@ -50,6 +50,12 @@ def update_config(new_config: dict):
 def get_project(project_id: str):
     return project_manager.get_project(project_id)
 
+@app.delete("/api/projects/{project_id}")
+def delete_project(project_id: str):
+    if project_manager.delete_project(project_id):
+        return {"status": "success"}
+    return {"status": "error", "message": "Project not found"}
+
 @app.post("/api/projects/{project_id}/plan")
 def generate_plan(project_id: str, data: PlanRequest):
     project_manager.add_prompt(project_id, data.prompt)
@@ -71,6 +77,36 @@ def set_current_step(project_id: str, step_idx: int):
 @app.put("/api/projects/{project_id}/plan")
 def update_plan(project_id: str, plan_data: dict):
     return project_manager.update_project(project_id, {"plan": plan_data, "status": "planned"})
+
+@app.get("/api/fs/list")
+def list_dirs(path: str = "/"):
+    try:
+        # Use home directory as default if path is empty or root
+        if not path or path == "/":
+            path = os.path.expanduser("~")
+            
+        items = []
+        # Get parent dir
+        parent = os.path.dirname(path)
+        
+        for entry in os.scandir(path):
+            if entry.is_dir() and not entry.name.startswith('.'):
+                items.append({
+                    "name": entry.name,
+                    "path": entry.path,
+                    "is_dir": True
+                })
+        
+        # Sort alphabetically
+        items.sort(key=lambda x: x["name"].lower())
+        
+        return {
+            "current_path": path,
+            "parent_path": parent,
+            "items": items
+        }
+    except Exception as e:
+        return {"error": str(e)}
 
 @app.get("/api/stats")
 def get_stats():
@@ -101,20 +137,22 @@ async def websocket_endpoint(websocket: WebSocket, project_id: str):
         
         # Load latest config for each step to allow dynamic prompt updates
         current_config = config.load_config()
+        path = project.get("path", "current directory")
         task_goal = f"{step_data.get('title', '')} - {step_data.get('goal', '')}"
-        worker_prompt = current_config["prompts"]["worker_prompt"].replace("{TASK_GOAL}", task_goal)
         
-        path = project.get("path")
+        # Inject the path context into the worker prompt
+        path_context = f"\n\nWORKSPACE: Your working directory is {path if path else 'current directory'}. All actions must happen within this folder."
+        worker_prompt = current_config["prompts"]["worker_prompt"].replace("{TASK_GOAL}", task_goal) + path_context
+        
         await websocket.send_text(f"\n[System] >>> STARTING STEP {step_key}/{len(steps_keys)}: {step_data.get('title')}\n")
         
         cmd = ["gemini", "-p", worker_prompt, "--model", Models[2], "-y"]
-        if path:
-            cmd.extend(["--dir", path])
         if session_id:
             cmd.extend(["--resume", session_id])
 
         master, slave = pty.openpty()
-        process = subprocess.Popen(cmd, stdin=slave, stdout=slave, stderr=subprocess.STDOUT, close_fds=True)
+        # Start the process in the project's directory
+        process = subprocess.Popen(cmd, stdin=slave, stdout=slave, stderr=subprocess.STDOUT, close_fds=True, cwd=path)
         os.close(slave)
         output_buffer = ""
 

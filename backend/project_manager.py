@@ -35,11 +35,12 @@ class ProjectManager:
 
     def create_project(self, name, description, path):
         project_id = str(uuid.uuid4())
+        
         project = {
             "id": project_id,
             "name": name,
             "description": description,
-            "path": path,
+            "path": os.path.abspath(path),
             "created_at": datetime.now().isoformat(),
             "updated_at": datetime.now().isoformat(),
             "plan": None,
@@ -136,6 +137,13 @@ class ProjectManager:
             self._save_db()
             return self.db["projects"][project_id]
         return None
+
+    def delete_project(self, project_id):
+        if project_id in self.db["projects"]:
+            del self.db["projects"][project_id]
+            self._save_db()
+            return True
+        return False
 
     def update_stats(self, new_stats):
         if not new_stats or "models" not in new_stats:

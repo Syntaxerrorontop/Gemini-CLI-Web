@@ -17,11 +17,9 @@ def debug_log(message) -> None:
         print("DEBUG: ", message)
 
 class Command:
-    def build(prompt: str, model: int, use_json:bool=True, use_list=True, session_id:str=None, yolo:bool=False, path:str=None) -> str|list:
+    def build(prompt: str, model: int, use_json:bool=True, use_list=True, session_id:str=None, yolo:bool=False) -> str|list:
         if not use_list:
             command = f"gemini -p '{prompt}' --model '{Models[model]}' "
-            if path:
-                command += f"--dir '{path}' "
             if session_id:
                 command += f"--resume '{session_id}' "
             if yolo:
@@ -31,8 +29,6 @@ class Command:
         
         else:
             command = ["gemini", "-p", f"{prompt}", "--model", f"{Models[model]}"]
-            if path:
-                command.extend(["--dir", path])
             if session_id:
                 command.extend(["--resume", session_id])
             if yolo:
@@ -43,25 +39,19 @@ class Command:
         debug_log(f"Command: {command}")
         return command
     
-    def execute(command: list) -> dict:
+    def execute(command: list, cwd: str = None) -> dict:
         try:
-            result = subprocess.run(command, capture_output=True, text=True, check=True)
-            # Try to parse the entire output as JSON
+            # Run the command in the specified directory
+            result = subprocess.run(command, capture_output=True, text=True, check=True, cwd=cwd)
             try:
                 ai_response = json.loads(result.stdout)
-                
-                # Track stats if available
                 if "stats" in ai_response:
                     project_manager.update_stats(ai_response["stats"])
-                    
                 return ai_response
             except json.JSONDecodeError:
-                # Fallback if not pure JSON
                 return {"response": result.stdout, "session_id": None, "stats": {}}
-
         except subprocess.CalledProcessError as e:
-            print(f"Code: {e.returncode}")
-            print(f"Error: {e.stderr}")
+            debug_log(f"Process Error: {e.stderr}")
             return {"error": e.stderr, "response": None}
 
 class InternalPrompts:
@@ -119,18 +109,18 @@ TASK GOAL: {TASK_GOAL}
 
 OPERATIONAL PROTOCOL:
 1. **Research & Contextualization**: Before making changes, examine the existing codebase to ensure architectural consistency.
-2. **Transparent Execution**: You MUST communicate your actions to the user in the console. 
-   - Explain what you are doing (e.g., 'Reading main.py to understand the data flow...').
-   - State which tools you are about to use and why.
-   - Summarize the logic you are implementing.
-3. **No Placeholders**: Write complete, production-ready code. Never use 'TODOs', 'rest of code...', or '...' comments.
-4. **Validation**: Ensure that your changes are logically sound and follow best practices (error handling, type safety, performance).
+2. **Mandatory Verbosity**: You MUST announce every single tool call BEFORE you execute it. 
+   Example: 'STRATEGY: I need to check the current directory structure. TOOL: Calling ls_dir...'
+   Example: 'STRATEGY: Implementing the login logic. TOOL: Using write_file for auth.py...'
+3. **Transparent Thought Process**: Explain your reasoning for each major decision.
+4. **No Placeholders**: Write complete, production-ready code.
+5. **Validation**: Ensure that your changes are logically sound.
 
 CRITICAL COMPLETION SIGNAL:
-When (and ONLY when) the task is fully completed and all files are verified, you must output EXACTLY AND ONLY this JSON object at the very end of your final response:
+When the task is fully completed, output EXACTLY AND ONLY this JSON at the very end:
 {"success": true}
 
-Now, begin your technical analysis and implementation."""
+Now, begin your analysis."""
                 },
             "safty": {
                 "force_formating": True
@@ -195,9 +185,13 @@ class AgentOrchestrator:
         project = project_manager.get_project(project_id)
         path = project.get("path") if project else None
         
-        initial_prompt = config.prompts.system_prompt + config.prompts.plan_generation + "\n\nUser Request: " + prompt
-        command = Command.build(initial_prompt, model=model, path=path)
-        data = Command.execute(command)
+        # Explicitly tell the AI about its workspace
+        workspace_info = f"\n\nCRITICAL CONTEXT: Your current workspace/output directory is: {path if path else 'current directory'}. All files must be created or modified relative to this path."
+        
+        initial_prompt = config.prompts.system_prompt + config.prompts.plan_generation + workspace_info + "\n\nUser Request: " + prompt
+        command = Command.build(initial_prompt, model=model)
+        data = Command.execute(command, cwd=path)
+
         
         if "response" in data:
             try:
