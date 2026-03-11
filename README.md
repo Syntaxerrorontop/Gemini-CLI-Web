@@ -27,6 +27,7 @@ Please refer to the [**SETUP.md**](./SETUP.md) for detailed instructions on sett
 This project is licensed under the **MIT License**.
 
 **Made by Syntax Studios**  
+🌐 [syntax-studios.org](https://syntax-studios.org)  
 © 2026 Syntax Studios. All rights reserved.
 
 Feel free to contribute, fork, or use this project in your own autonomous engineering workflows.
