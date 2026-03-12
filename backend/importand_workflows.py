@@ -59,10 +59,17 @@ class InternalPrompts:
         plan_generation = None
         system_prompt = None
         worker_prompt = None
+        reviewer_prompt = None
+        recovery_prompt = None
     
 class InternalSafty:
     def __init__(self) -> None:
         force_formating = None
+
+class InternalFeatures:
+    def __init__(self) -> None:
+        enable_reviewer = None
+        enable_recovery = None
 
 class CustomConfig:
     def __init__(self) -> None:
@@ -70,6 +77,7 @@ class CustomConfig:
 
         self.safty: InternalSafty = InternalSafty()
         self.prompts: InternalPrompts = InternalPrompts()
+        self.features: InternalFeatures = InternalFeatures()
 
         self.__init_config()
     
@@ -91,39 +99,43 @@ OUTPUT REQUIREMENTS:
     - "title": A concise, professional name for the phase.
     - "goal": A highly detailed, technical instruction set for the coding agent. 
       Include specific file names, library recommendations, and logic requirements. 
-      The goal must provide enough context so the agent can work autonomously.
 
-STRICT RULE: NO conversational filler, NO markdown, NO preamble. ONLY the JSON object.
-
-Example Structure:
-{
-  "1": { "title": "...", "goal": "..." },
-  "2": { "title": "...", "goal": "..." }
-}""",
-                "system_prompt": "You are operating as a high-performance Autonomous Engineering Agent. Maintain a high-signal, professional tone.",
+STRICT RULE: NO conversational filler, NO markdown, NO preamble. ONLY the JSON object.""",
+                "system_prompt": "You are operating as a high-performance Autonomous Engineering Agent.",
                 "worker_prompt": """You are a World-Class Autonomous Senior Full-Stack Engineer. 
-Your task is to execute the following roadmap step with absolute technical excellence:
+Your task is to execute the following roadmap step:
 ---
 TASK GOAL: {TASK_GOAL}
 ---
-
 OPERATIONAL PROTOCOL:
-1. **Research & Contextualization**: Before making changes, examine the existing codebase to ensure architectural consistency.
-2. **Mandatory Verbosity**: You MUST announce every single tool call BEFORE you execute it. 
-   Example: 'STRATEGY: I need to check the current directory structure. TOOL: Calling ls_dir...'
-   Example: 'STRATEGY: Implementing the login logic. TOOL: Using write_file for auth.py...'
-3. **Transparent Thought Process**: Explain your reasoning for each major decision.
-4. **No Placeholders**: Write complete, production-ready code.
-5. **Validation**: Ensure that your changes are logically sound.
-
-CRITICAL COMPLETION SIGNAL:
-When the task is fully completed, output EXACTLY AND ONLY this JSON at the very end:
-{"success": true}
-
-Now, begin your analysis."""
+1. Announce tool usage BEFORE executing (e.g. 'TOOL: Using write_file...').
+2. Write complete, production-ready code. No placeholders.
+CRITICAL: When fully completed, output EXACTLY AND ONLY: {"success": true}""",
+                "reviewer_prompt": """You are a strict Elite Code Reviewer and Security Auditor.
+Your task is to review the code changes just made for the current task: {TASK_GOAL}.
+1. Check for bugs, security flaws, and missing requirements.
+2. If perfect, output EXACTLY AND ONLY: {"approved": true}
+3. If there are issues, output a JSON with feedback: {"approved": false, "feedback": "Detailed explanation of what needs to be fixed..."}""",
+                "recovery_prompt": """You are an Elite Debugger. The previous execution failed with an error.
+Here is the error log:
+---
+{ERROR_LOG}
+---
+Analyze the error, fix the root cause in the codebase, and verify the fix.
+CRITICAL: When the fix is applied and verified, output EXACTLY AND ONLY: {"success": true}""",
+                "debugging_prompt": """You are a Senior Debugging Specialist. 
+Analyze the provided error message or bug description. 
+1. Research the codebase to identify the root cause.
+2. Propose a fix and execute it autonomously.
+3. Verify the fix.
+CRITICAL: When the task is fully completed, output EXACTLY AND ONLY: {"success": true}"""
                 },
             "safty": {
                 "force_formating": True
+            },
+            "features": {
+                "enable_reviewer": False,
+                "enable_recovery": True
             }
         }
     
